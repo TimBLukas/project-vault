@@ -63,7 +63,7 @@ async function readGitMetadata(rootPath: string): Promise<GitMetadata | undefine
 			worktree: gitDir !== '.git'
 		};
 	} catch (error: unknown) {
-		console.warn(`Project Launcher: unable to read Git metadata for ${rootPath}.`, error);
+		console.warn(`Project Vault: unable to read Git metadata for ${rootPath}.`, error);
 		return undefined;
 	}
 }

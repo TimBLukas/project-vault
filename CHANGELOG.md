@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "project-launcher" extension are documented in this file.
+All notable changes to the "project-vault" extension are documented in this file.
 
 ## [Unreleased]
 

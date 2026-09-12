@@ -3,8 +3,8 @@ import * as vscode from 'vscode';
 
 suite('Extension Integration', () => {
 	test('registers project launcher commands on activation', async () => {
-		const extension = vscode.extensions.all.find((entry) => entry.packageJSON?.name === 'project-launcher');
-		assert.ok(extension, 'Expected project-launcher extension to be available in test host');
+		const extension = vscode.extensions.all.find((entry) => entry.packageJSON?.name === 'project-vault');
+		assert.ok(extension, 'Expected project-vault extension to be available in test host');
 
 		await extension.activate();
 

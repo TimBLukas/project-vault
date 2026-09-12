@@ -1,10 +1,11 @@
 {
-  "name": "project-launcher",
+  "name": "project-vault",
   "license": "MIT",
-  "displayName": "Project Launcher",
+  "displayName": "Project Vault",
+  "icon": "resources/project-vault.jpeg",
   "description": "Manage saved projects, workspace files, tags, collections, and recent history.",
   "version": "0.0.1",
-  "publisher": "timblukas",
+  "publisher": "TBL",
   "engines": {
     "vscode": "^1.137.0"
   },
@@ -60,8 +61,8 @@
       "activitybar": [
         {
           "id": "projectLauncher",
-          "title": "Project Launcher",
-          "icon": "resources/project-launcher.svg"
+          "title": "Project Vault",
+          "icon": "resources/project-vault.svg"
         }
       ]
     },
@@ -70,140 +71,140 @@
         {
           "id": "projectLauncherView",
           "name": "Library",
-          "contextualTitle": "Project Launcher"
+          "contextualTitle": "Project Vault"
         }
       ]
     },
     "commands": [
       {
         "command": "projectLauncher.addCurrentProject",
-        "title": "Project Launcher: Add Current Project",
-        "category": "Project Launcher"
+        "title": "Project Vault: Add Current Project",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.createProject",
-        "title": "Project Launcher: Add Project from File or Folder",
-        "category": "Project Launcher"
+        "title": "Project Vault: Add Project from File or Folder",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.openProject",
-        "title": "Project Launcher: Open Project",
-        "category": "Project Launcher"
+        "title": "Project Vault: Open Project",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.openProjectCurrentWindow",
-        "title": "Project Launcher: Open in Current Window",
-        "category": "Project Launcher"
+        "title": "Project Vault: Open in Current Window",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.openProjectNewWindow",
-        "title": "Project Launcher: Open in New Window",
-        "category": "Project Launcher"
+        "title": "Project Vault: Open in New Window",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.openProjectSplit",
-        "title": "Project Launcher: Open in Split",
-        "category": "Project Launcher"
+        "title": "Project Vault: Open in Split",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.openProjectNewWorkspace",
-        "title": "Project Launcher: Open in New Workspace",
-        "category": "Project Launcher"
+        "title": "Project Vault: Open in New Workspace",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.quickOpenProject",
-        "title": "Project Launcher: Quick Open",
-        "category": "Project Launcher"
+        "title": "Project Vault: Quick Open",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.removeProject",
-        "title": "Project Launcher: Remove Saved Project",
-        "category": "Project Launcher"
+        "title": "Project Vault: Remove Saved Project",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.pinProject",
-        "title": "Project Launcher: Pin Saved Project",
-        "category": "Project Launcher"
+        "title": "Project Vault: Pin Saved Project",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.unpinProject",
-        "title": "Project Launcher: Unpin Saved Project",
-        "category": "Project Launcher"
+        "title": "Project Vault: Unpin Saved Project",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.editProjectTags",
-        "title": "Project Launcher: Edit Project Tags",
-        "category": "Project Launcher"
+        "title": "Project Vault: Edit Project Tags",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.setProjectCollection",
-        "title": "Project Launcher: Set Project Collection",
-        "category": "Project Launcher"
+        "title": "Project Vault: Set Project Collection",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.removeHistoryProject",
-        "title": "Project Launcher: Remove History Entry",
-        "category": "Project Launcher"
+        "title": "Project Vault: Remove History Entry",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.clearHistory",
-        "title": "Project Launcher: Clear History",
-        "category": "Project Launcher"
+        "title": "Project Vault: Clear History",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.filterProjects",
-        "title": "Project Launcher: Filter Projects",
-        "category": "Project Launcher"
+        "title": "Project Vault: Filter Projects",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.clearFilter",
-        "title": "Project Launcher: Clear Project Filter",
-        "category": "Project Launcher"
+        "title": "Project Vault: Clear Project Filter",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.setSortMode",
-        "title": "Project Launcher: Set Sort Mode",
-        "category": "Project Launcher"
+        "title": "Project Vault: Set Sort Mode",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.exportProjects",
-        "title": "Project Launcher: Export Projects",
-        "category": "Project Launcher"
+        "title": "Project Vault: Export Projects",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.importProjects",
-        "title": "Project Launcher: Import Projects",
-        "category": "Project Launcher"
+        "title": "Project Vault: Import Projects",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.runProjectAction",
-        "title": "Project Launcher: Run Project Action",
-        "category": "Project Launcher"
+        "title": "Project Vault: Run Project Action",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.openProjectTerminal",
-        "title": "Project Launcher: Open Integrated Terminal",
-        "category": "Project Launcher"
+        "title": "Project Vault: Open Integrated Terminal",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.revealProject",
-        "title": "Project Launcher: Reveal Project in File Manager",
-        "category": "Project Launcher"
+        "title": "Project Vault: Reveal Project in File Manager",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.editProjectName",
-        "title": "Project Launcher: Edit Project Display Name",
-        "category": "Project Launcher"
+        "title": "Project Vault: Edit Project Display Name",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.editProjectAliases",
-        "title": "Project Launcher: Edit Project Aliases",
-        "category": "Project Launcher"
+        "title": "Project Vault: Edit Project Aliases",
+        "category": "Project Vault"
       },
       {
         "command": "projectLauncher.refresh",
-        "title": "Project Launcher: Refresh",
-        "category": "Project Launcher"
+        "title": "Project Vault: Refresh",
+        "category": "Project Vault"
       }
     ],
     "menus": {
@@ -358,7 +359,7 @@
       ]
     },
     "configuration": {
-      "title": "Project Launcher",
+      "title": "Project Vault",
       "properties": {
         "projectLauncher.maxHistoryEntries": {
           "type": "number",
@@ -493,7 +494,7 @@
         "projectLauncher.enableDiagnosticLogging": {
           "type": "boolean",
           "default": false,
-          "description": "Write opt-in diagnostic information to the Project Launcher output channel."
+          "description": "Write opt-in diagnostic information to the Project Vault output channel."
         },
         "projectLauncher.projectMarkers": {
           "type": "object",

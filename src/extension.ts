@@ -38,7 +38,7 @@ const gitMetadataService = new GitMetadataService();
 let diagnosticLogger: vscode.OutputChannel | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-	diagnosticLogger = vscode.window.createOutputChannel('Project Launcher');
+	diagnosticLogger = vscode.window.createOutputChannel('Project Vault');
 	context.subscriptions.push(diagnosticLogger);
 	const projectService = new ProjectService(context);
 	const projectProvider = new ProjectProvider(projectService);
@@ -265,7 +265,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			? path.dirname(selectedProject.project.path)
 			: selectedProject.project.path;
 		const terminal = vscode.window.createTerminal({
-			name: `Project Launcher: ${selectedProject.project.name}`,
+			name: `Project Vault: ${selectedProject.project.name}`,
 			cwd: workingDirectory
 		});
 		terminal.show();
@@ -353,7 +353,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			portableRoot && portableRoot.trim().length > 0 ? { [path.resolve(portableRoot.trim())]: '$PROJECT_ROOT' } : undefined
 		);
 		const saveUri = await vscode.window.showSaveDialog({
-			defaultUri: vscode.Uri.file(path.join(os.homedir(), 'project-launcher-export.json')),
+			defaultUri: vscode.Uri.file(path.join(os.homedir(), 'project-vault-export.json')),
 			filters: { JSON: ['json'] }
 		});
 		if (!saveUri) {
@@ -461,7 +461,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				: selectedProject.project.path;
 
 		const terminal = vscode.window.createTerminal({
-			name: `Project Launcher: ${selectedProject.project.name}`,
+			name: `Project Vault: ${selectedProject.project.name}`,
 			cwd: workingDirectory
 		});
 		terminal.show(true);

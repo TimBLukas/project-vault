@@ -1,5 +1,13 @@
 # Project Vault
 
+# My VS Code Extension
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/YOUR_PUBLISHER.YOUR_EXTENSION?logo=visual-studio-code&logoColor=white)](https://marketplace.visualstudio.com/)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/YOUR_PUBLISHER.YOUR_EXTENSION?logo=visual-studio-code&logoColor=white)](https://marketplace.visualstudio.com/)
+[![Rating](https://img.shields.io/visual-studio-marketplace/r/YOUR_PUBLISHER.YOUR_EXTENSION?logo=visual-studio-code&logoColor=white)](https://marketplace.visualstudio.com/)
+
 Project Vault adds a dedicated Activity Bar view to manage saved projects, workspace files, collections, and recent history.
 (in vs code)
 

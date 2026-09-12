@@ -3,6 +3,8 @@
 Project Vault adds a dedicated Activity Bar view to manage saved projects, workspace files, collections, and recent history.
 (in vs code)
 
+You can find this extension in the [Visual Studio Code Marketplace](https://marketplace.visualstudio.com/items?itemName=TBL.project-vault)
+
 ## Features
 
 - Save the current workspace folder or `.code-workspace` file as a project.

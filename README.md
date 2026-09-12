@@ -3,7 +3,6 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript\&logoColor=white)](https://www.typescriptlang.org/)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?logo=visual-studio-code\&logoColor=white)](https://marketplace.visualstudio.com/items?itemName=TBL.project-vault)
-[![CI](https://github.com/TBL/project-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/TBL/project-vault/actions/workflows/ci.yml)
 
 Project Vault adds a dedicated Activity Bar view to manage saved projects, workspace files, collections, and recent history in VS Code.
 

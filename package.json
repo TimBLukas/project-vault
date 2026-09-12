@@ -1,11 +1,12 @@
 {
   "name": "project-launcher",
+  "license": "MIT",
   "displayName": "Project Launcher",
   "description": "Manage saved projects, workspace files, tags, collections, and recent history.",
   "version": "0.0.1",
   "publisher": "timblukas",
   "engines": {
-    "vscode": "^1.115.0"
+    "vscode": "^1.137.0"
   },
   "categories": [
     "Other"
@@ -23,6 +24,7 @@
     "onStartupFinished",
     "onView:projectLauncherView",
     "onCommand:projectLauncher.addCurrentProject",
+    "onCommand:projectLauncher.createProject",
     "onCommand:projectLauncher.openProject",
     "onCommand:projectLauncher.openProjectCurrentWindow",
     "onCommand:projectLauncher.openProjectNewWindow",
@@ -42,6 +44,10 @@
     "onCommand:projectLauncher.exportProjects",
     "onCommand:projectLauncher.importProjects",
     "onCommand:projectLauncher.runProjectAction",
+    "onCommand:projectLauncher.openProjectTerminal",
+    "onCommand:projectLauncher.revealProject",
+    "onCommand:projectLauncher.editProjectName",
+    "onCommand:projectLauncher.editProjectAliases",
     "onCommand:projectLauncher.refresh"
   ],
   "main": "./out/extension.js",
@@ -72,6 +78,11 @@
       {
         "command": "projectLauncher.addCurrentProject",
         "title": "Project Launcher: Add Current Project",
+        "category": "Project Launcher"
+      },
+      {
+        "command": "projectLauncher.createProject",
+        "title": "Project Launcher: Add Project from File or Folder",
         "category": "Project Launcher"
       },
       {
@@ -170,6 +181,26 @@
         "category": "Project Launcher"
       },
       {
+        "command": "projectLauncher.openProjectTerminal",
+        "title": "Project Launcher: Open Integrated Terminal",
+        "category": "Project Launcher"
+      },
+      {
+        "command": "projectLauncher.revealProject",
+        "title": "Project Launcher: Reveal Project in File Manager",
+        "category": "Project Launcher"
+      },
+      {
+        "command": "projectLauncher.editProjectName",
+        "title": "Project Launcher: Edit Project Display Name",
+        "category": "Project Launcher"
+      },
+      {
+        "command": "projectLauncher.editProjectAliases",
+        "title": "Project Launcher: Edit Project Aliases",
+        "category": "Project Launcher"
+      },
+      {
         "command": "projectLauncher.refresh",
         "title": "Project Launcher: Refresh",
         "category": "Project Launcher"
@@ -233,6 +264,26 @@
           "command": "projectLauncher.runProjectAction",
           "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned || viewItem == project.history)",
           "group": "inline@2"
+        },
+        {
+          "command": "projectLauncher.openProjectTerminal",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned || viewItem == project.history)",
+          "group": "inline@2"
+        },
+        {
+          "command": "projectLauncher.revealProject",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned || viewItem == project.history)",
+          "group": "navigation@11"
+        },
+        {
+          "command": "projectLauncher.editProjectName",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
+          "group": "navigation@12"
+        },
+        {
+          "command": "projectLauncher.editProjectAliases",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
+          "group": "navigation@13"
         },
         {
           "command": "projectLauncher.pinProject",
@@ -438,6 +489,16 @@
               "command"
             ]
           }
+        },
+        "projectLauncher.enableDiagnosticLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Write opt-in diagnostic information to the Project Launcher output channel."
+        },
+        "projectLauncher.projectMarkers": {
+          "type": "object",
+          "default": {},
+          "description": "Additional filename markers mapped to a project type, for example {\"WORKSPACE\": \"Generic\"}."
         }
       }
     }
@@ -451,15 +512,19 @@
     "test": "vscode-test",
     "package:vsix": "vsce package --no-yarn --skip-license"
   },
+  "overrides": {
+    "diff": "^8.0.2",
+    "serialize-javascript": "^7.1.1"
+  },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "^22.19.17",
-    "@types/vscode": "^1.115.0",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.7.0",
-    "eslint": "^9.39.3",
+    "@types/node": "^22.20.2",
+    "@types/vscode": "^1.137.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "eslint": "^9.39.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.70.0"
   }
 }

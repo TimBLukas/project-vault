@@ -9,6 +9,7 @@ export interface ProjectTypeDetectionOptions {
 	skipDirectories: string[];
 	useCache: boolean;
 	cacheTtlMs: number;
+	projectMarkers?: Record<string, ProjectType>;
 }
 
 interface DetectionCacheEntry {
@@ -48,17 +49,18 @@ async function detectProjectTypeWithoutCache(
 	rootPath: string,
 	options: ProjectTypeDetectionOptions
 ): Promise<ProjectType> {
-	const rootMarker = await detectMarkerAtDirectory(rootPath);
+	const rootMarker = await detectMarkerAtDirectory(rootPath, options.projectMarkers);
 	if (rootMarker !== undefined) {
 		return rootMarker;
 	}
 
 	const skipDirectorySet = new Set(options.skipDirectories.map((entry) => entry.toLowerCase()));
 	const queue: Array<{ directory: string; depth: number }> = [{ directory: rootPath, depth: 0 }];
+	let queueIndex = 0;
 	let scannedDirectories = 0;
 
-	while (queue.length > 0 && scannedDirectories < options.maxScanDirectories) {
-		const current = queue.shift();
+	while (queueIndex < queue.length && scannedDirectories < options.maxScanDirectories) {
+		const current = queue[queueIndex++];
 		if (current === undefined || current.depth >= options.maxDepth) {
 			continue;
 		}
@@ -71,7 +73,7 @@ async function detectProjectTypeWithoutCache(
 				break;
 			}
 
-			const detectedMarker = await detectMarkerAtDirectory(childDirectory);
+			const detectedMarker = await detectMarkerAtDirectory(childDirectory, options.projectMarkers);
 			if (detectedMarker !== undefined) {
 				return detectedMarker;
 			}
@@ -83,7 +85,15 @@ async function detectProjectTypeWithoutCache(
 	return 'Generic';
 }
 
-async function detectMarkerAtDirectory(directoryPath: string): Promise<ProjectType | undefined> {
+async function detectMarkerAtDirectory(
+	directoryPath: string,
+	customMarkers: Record<string, ProjectType> | undefined
+): Promise<ProjectType | undefined> {
+	for (const [marker, type] of Object.entries(customMarkers ?? {})) {
+		if (await fileExists(path.join(directoryPath, marker))) {
+			return type;
+		}
+	}
 	const packageJsonPath = path.join(directoryPath, 'package.json');
 	if (await fileExists(packageJsonPath)) {
 		return detectNodeProjectType(packageJsonPath);
@@ -109,7 +119,46 @@ async function detectMarkerAtDirectory(directoryPath: string): Promise<ProjectTy
 		return 'Go';
 	}
 
+	const markers: Array<[string, ProjectType]> = [
+		['pom.xml', 'Java'],
+		['build.gradle', 'Java'],
+		['build.gradle.kts', 'Kotlin'],
+		['*.csproj', '.NET'],
+		['*.sln', '.NET'],
+		['composer.json', 'PHP'],
+		['Gemfile', 'Ruby'],
+		['Dockerfile', 'Docker'],
+		['docker-compose.yml', 'Docker'],
+		['docker-compose.yaml', 'Docker'],
+		['main.tf', 'Terraform']
+	];
+	for (const [marker, type] of markers) {
+		if (marker.startsWith('*.')) {
+			const entries = await safeReadDirectory(directoryPath);
+			if (entries.some((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(marker.slice(1).toLowerCase()))) {
+				return type;
+			}
+		} else if (await fileExists(path.join(directoryPath, marker))) {
+			return type;
+		}
+	}
+
+	if (await fileExists(path.join(directoryPath, 'pnpm-workspace.yaml')) || await fileExists(path.join(directoryPath, 'lerna.json'))) {
+		return 'Monorepo';
+	}
+
 	return undefined;
+}
+
+async function safeReadDirectory(directoryPath: string): Promise<import('node:fs').Dirent[]> {
+	try {
+		return await fs.readdir(directoryPath, { withFileTypes: true });
+	} catch (error: unknown) {
+		if (isDirectoryReadError(error)) {
+			return [];
+		}
+		throw error;
+	}
 }
 
 async function detectNodeProjectType(packageJsonPath: string): Promise<ProjectType> {
@@ -182,7 +231,7 @@ async function fileExists(filePath: string): Promise<boolean> {
 		await fs.access(filePath);
 		return true;
 	} catch (error: unknown) {
-		if (isMissingPathError(error)) {
+		if (isDirectoryReadError(error)) {
 			return false;
 		}
 
@@ -194,12 +243,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
 }
 
-function isMissingPathError(error: unknown): boolean {
-	return isNodeError(error) && (error.code === 'ENOENT' || error.code === 'ENOTDIR');
-}
-
 function isDirectoryReadError(error: unknown): boolean {
-	return isNodeError(error) && (error.code === 'ENOENT' || error.code === 'EACCES' || error.code === 'EPERM');
+	return isNodeError(error) && (error.code === 'ENOENT' || error.code === 'ENOTDIR' || error.code === 'EACCES' || error.code === 'EPERM');
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

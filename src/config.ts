@@ -21,6 +21,8 @@ export interface ProjectLauncherConfig {
 	showGitMetadata: boolean;
 	gitMetadataCacheTtlMs: number;
 	customActions: ProjectLauncherCustomAction[];
+	enableDiagnosticLogging?: boolean;
+	projectMarkers?: Record<string, string>;
 }
 
 export interface ProjectConfigProvider {
@@ -44,8 +46,25 @@ export class VscodeProjectConfigProvider implements ProjectConfigProvider {
 			showGitMetadata: configuration.get<boolean>('showGitMetadata', true),
 			gitMetadataCacheTtlMs: readNumberSetting(configuration, 'gitMetadataCacheTtlMs', 30000, 1000, 300000),
 			customActions: readCustomActions(configuration, 'customActions', defaultCustomActions())
+			,enableDiagnosticLogging: configuration.get<boolean>('enableDiagnosticLogging', false)
+			,projectMarkers: readProjectMarkers(configuration)
 		};
 	}
+
+}
+
+function readProjectMarkers(configuration: vscode.WorkspaceConfiguration): Record<string, string> {
+	const rawValue = configuration.get<unknown>('projectMarkers', {});
+	if (!isRecord(rawValue)) {
+		return {};
+	}
+	const markers: Record<string, string> = {};
+	for (const [marker, type] of Object.entries(rawValue).slice(0, 50)) {
+		if (/^[\w.*-]{1,120}$/.test(marker) && typeof type === 'string' && type.trim().length > 0) {
+			markers[marker] = type.trim().slice(0, 40);
+		}
+	}
+	return markers;
 }
 
 function readNumberSetting(
@@ -105,7 +124,7 @@ function readCustomActions(
 	}
 
 	const parsedActions: ProjectLauncherCustomAction[] = [];
-	for (const entry of rawValue) {
+	for (const entry of rawValue.slice(0, 50)) {
 		const action = parseCustomAction(entry);
 		if (action !== undefined) {
 			parsedActions.push(action);
@@ -128,12 +147,15 @@ function parseCustomAction(value: unknown): ProjectLauncherCustomAction | undefi
 	if (typeof rawCommand !== 'string' || rawCommand.trim().length === 0) {
 		return undefined;
 	}
+	if (rawLabel.length > 120 || rawCommand.length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(rawCommand)) {
+		return undefined;
+	}
 
 	return {
-		label: rawLabel.trim(),
-		command: rawCommand.trim(),
-		projectTypes: toOptionalStringArray(value.projectTypes),
-		targetKinds: toOptionalStringArray(value.targetKinds)
+		label: rawLabel.trim().slice(0, 120),
+		command: rawCommand.trim().slice(0, 2000),
+		projectTypes: toOptionalStringArray(value.projectTypes)?.slice(0, 20),
+		targetKinds: toOptionalStringArray(value.targetKinds)?.slice(0, 10)
 	};
 }
 
@@ -145,7 +167,8 @@ function toOptionalStringArray(value: unknown): string[] | undefined {
 	const normalized = value
 		.filter((entry): entry is string => typeof entry === 'string')
 		.map((entry) => entry.trim())
-		.filter((entry) => entry.length > 0);
+		.filter((entry) => entry.length > 0)
+		.map((entry) => entry.slice(0, 80));
 
 	return normalized.length > 0 ? normalized : undefined;
 }

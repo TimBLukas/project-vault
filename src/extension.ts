@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { VscodeProjectConfigProvider } from './config';
+import { GitMetadataService } from './gitMetadataService';
 import { normalizePath } from './pathUtils';
 import { sortProjects } from './projectSort';
 import {
@@ -33,8 +34,12 @@ type ProjectSelectionScope = 'saved' | 'history' | 'all';
 type OpenMode = 'configured' | 'currentWindow' | 'newWindow' | 'split' | 'newWorkspace';
 
 const configProvider = new VscodeProjectConfigProvider();
+const gitMetadataService = new GitMetadataService();
+let diagnosticLogger: vscode.OutputChannel | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	diagnosticLogger = vscode.window.createOutputChannel('Project Launcher');
+	context.subscriptions.push(diagnosticLogger);
 	const projectService = new ProjectService(context);
 	const projectProvider = new ProjectProvider(projectService);
 
@@ -45,8 +50,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	context.subscriptions.push(projectProvider, treeView);
 
+	registerCommand(context, 'projectLauncher.createProject', async () => {
+		const selection = await vscode.window.showOpenDialog({
+			canSelectMany: false,
+			canSelectFiles: true,
+			canSelectFolders: true,
+			openLabel: 'Add Project'
+		});
+		const target = selection?.[0];
+		if (!target) {
+			return;
+		}
+		await projectService.addToSaved(target);
+		await projectService.addToHistory(target);
+		projectProvider.refresh();
+	});
+
 	registerCommand(context, 'projectLauncher.addCurrentProject', async () => {
-		const currentProjectUri = getCurrentProjectUri();
+		const currentProjectUri = await getCurrentProjectUri(context);
 		if (!currentProjectUri) {
 			await vscode.window.showWarningMessage('Open a workspace folder or a .code-workspace file before saving.');
 			return;
@@ -191,6 +212,78 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		projectProvider.refresh();
 	});
 
+	registerCommand(context, 'projectLauncher.editProjectName', async (...args: unknown[]) => {
+		const selectedProject = await resolveSavedProjectSelection(
+			projectService,
+			toProjectTreeItem(args[0]),
+			'Select a saved project'
+		);
+		if (!selectedProject) {
+			return;
+		}
+		const name = await vscode.window.showInputBox({
+			prompt: 'Project display name',
+			value: selectedProject.project.name,
+			validateInput: (value) => value.trim().length === 0 ? 'Enter a display name.' : undefined
+		});
+		if (name !== undefined) {
+			await projectService.updateSavedName(selectedProject.project.id, name);
+			projectProvider.refresh();
+		}
+	});
+
+	registerCommand(context, 'projectLauncher.editProjectAliases', async (...args: unknown[]) => {
+		const selectedProject = await resolveSavedProjectSelection(
+			projectService,
+			toProjectTreeItem(args[0]),
+			'Select a saved project'
+		);
+		if (!selectedProject) {
+			return;
+		}
+		const aliases = await vscode.window.showInputBox({
+			prompt: 'Aliases separated by commas',
+			value: (selectedProject.project.aliases ?? []).join(', ')
+		});
+		if (aliases !== undefined) {
+			await projectService.updateSavedAliases(selectedProject.project.id, splitTagInput(aliases));
+			projectProvider.refresh();
+		}
+	});
+
+	registerCommand(context, 'projectLauncher.openProjectTerminal', async (...args: unknown[]) => {
+		const selectedProject = await resolveProjectForOpen(projectService, toProjectTreeItem(args[0]));
+		if (!selectedProject) {
+			return;
+		}
+		if (!(await projectService.isValidProjectTarget(selectedProject.project))) {
+			await vscode.window.showWarningMessage(`Project path is unavailable: ${selectedProject.project.path}`);
+			projectProvider.refresh();
+			return;
+		}
+		const workingDirectory = selectedProject.project.target === 'workspace'
+			? path.dirname(selectedProject.project.path)
+			: selectedProject.project.path;
+		const terminal = vscode.window.createTerminal({
+			name: `Project Launcher: ${selectedProject.project.name}`,
+			cwd: workingDirectory
+		});
+		terminal.show();
+	});
+
+	registerCommand(context, 'projectLauncher.revealProject', async (...args: unknown[]) => {
+		const selectedProject = await resolveProjectForOpen(projectService, toProjectTreeItem(args[0]));
+		if (!selectedProject) {
+			return;
+		}
+		if (!(await projectService.isValidProjectTarget(selectedProject.project))) {
+			await vscode.window.showWarningMessage(`Project path is unavailable: ${selectedProject.project.path}`);
+			projectProvider.refresh();
+			return;
+		}
+		await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(selectedProject.project.path));
+	});
+
 	registerCommand(context, 'projectLauncher.removeHistoryProject', async (...args: unknown[]) => {
 		const item = toProjectTreeItem(args[0]);
 		const selectedProject = await resolveHistoryProjectSelection(projectService, item);
@@ -252,7 +345,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 
 	registerCommand(context, 'projectLauncher.exportProjects', async () => {
-		const snapshot = await projectService.exportSnapshot();
+		const portableRoot = await vscode.window.showInputBox({
+			prompt: 'Optional folder to make portable (paths below it become $PROJECT_ROOT)',
+			placeHolder: '/home/user/src (leave empty for absolute paths)'
+		});
+		const snapshot = await projectService.exportSnapshot(
+			portableRoot && portableRoot.trim().length > 0 ? { [path.resolve(portableRoot.trim())]: '$PROJECT_ROOT' } : undefined
+		);
 		const saveUri = await vscode.window.showSaveDialog({
 			defaultUri: vscode.Uri.file(path.join(os.homedir(), 'project-launcher-export.json')),
 			filters: { JSON: ['json'] }
@@ -278,10 +377,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		if (!strategy) {
 			return;
 		}
+		if (strategy === 'replace') {
+			const confirmation = await vscode.window.showWarningMessage(
+				'Replace will overwrite all saved projects and recent history with the imported data.',
+				{ modal: true },
+				'Replace Data'
+			);
+			if (confirmation !== 'Replace Data') {
+				return;
+			}
+		}
 
 		const rawFile = await vscode.workspace.fs.readFile(selection[0]);
 		const parsed = JSON.parse(Buffer.from(rawFile).toString('utf8')) as unknown;
-		const result = await projectService.importSnapshot(parsed, strategy);
+		const pathMappings: Record<string, string> = {};
+		if (containsPortablePath(parsed)) {
+			const mappingRoot = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				openLabel: 'Use Folder for $PROJECT_ROOT'
+			});
+			if (mappingRoot?.[0]) {
+				pathMappings.$PROJECT_ROOT = mappingRoot[0].fsPath;
+			}
+		}
+		const result = await projectService.importSnapshot(parsed, strategy, pathMappings);
 		projectProvider.refresh();
 		await vscode.window.showInformationMessage(
 			`Imported project data (${result.savedCount} saved, ${result.historyCount} history).`
@@ -289,14 +410,48 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 
 	registerCommand(context, 'projectLauncher.runProjectAction', async (...args: unknown[]) => {
+		if (!vscode.workspace.isTrusted) {
+			await vscode.window.showErrorMessage('Project actions are disabled until this workspace is trusted.');
+			return;
+		}
+
 		const item = toProjectTreeItem(args[0]);
 		const selectedProject = await resolveProjectForOpen(projectService, item);
 		if (!selectedProject) {
 			return;
 		}
+		if (!(await projectService.isValidProjectTarget(selectedProject.project))) {
+			await vscode.window.showErrorMessage(`Project path no longer exists: ${selectedProject.project.path}`);
+			projectProvider.refresh();
+			return;
+		}
 
 		const action = await pickProjectAction(selectedProject.project);
 		if (!action) {
+			return;
+		}
+
+		const confirmation = await vscode.window.showWarningMessage(
+			`Run "${action.label}" in ${selectedProject.project.name}? This executes a terminal command.`,
+			{ modal: true },
+			'Run Action'
+		);
+		if (confirmation !== 'Run Action') {
+			return;
+		}
+
+		if (action.command === '__openGitRepository') {
+			const metadata = await gitMetadataService.getMetadata(
+				selectedProject.project,
+				configProvider.getConfig().gitMetadataCacheTtlMs
+			);
+			if (!metadata) {
+				await vscode.window.showInformationMessage('This project is not inside a Git repository.');
+				return;
+			}
+			await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(metadata.repositoryRoot), {
+				forceReuseWindow: true
+			});
 			return;
 		}
 
@@ -310,6 +465,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			cwd: workingDirectory
 		});
 		terminal.show(true);
+		if (action.command === '__openTerminal') {
+			return;
+		}
 		terminal.sendText(interpolateProjectAction(action.command, selectedProject.project), true);
 	});
 
@@ -317,7 +475,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		projectProvider.refresh();
 	});
 
-	await trackCurrentWorkspace(projectService, projectProvider);
+	await trackCurrentWorkspace(projectService, projectProvider, context);
 
 	const workspaceFolderListener = vscode.workspace.onDidChangeWorkspaceFolders((event) => {
 		void executeWithErrorSurface(async () => {
@@ -440,12 +598,8 @@ async function openProjectInNewWorkspace(project: Project, projectUri: vscode.Ur
 		return;
 	}
 
-	const workspaceDirectory = path.join(os.tmpdir(), 'project-launcher-workspaces');
-	await fs.mkdir(workspaceDirectory, { recursive: true });
-	const workspaceFilePath = path.join(
-		workspaceDirectory,
-		`${sanitizeFileName(project.name)}-${Date.now()}.code-workspace`
-	);
+	const workspaceDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'project-launcher-workspaces-'));
+	const workspaceFilePath = path.join(workspaceDirectory, `${sanitizeFileName(project.name)}.code-workspace`);
 	const workspaceContent = {
 		folders: [{ path: project.path }],
 		settings: {}
@@ -470,11 +624,18 @@ async function executeWithErrorSurface(action: () => Promise<void>): Promise<voi
 	try {
 		await action();
 	} catch (error: unknown) {
+		if (configProvider.getConfig().enableDiagnosticLogging) {
+			diagnosticLogger?.appendLine(`[${new Date().toISOString()}] ${errorMessage(error)}`);
+		}
 		await vscode.window.showErrorMessage(errorMessage(error));
 	}
 }
 
-async function trackCurrentWorkspace(projectService: ProjectService, projectProvider: ProjectProvider): Promise<void> {
+async function trackCurrentWorkspace(
+	projectService: ProjectService,
+	projectProvider: ProjectProvider,
+	context?: vscode.ExtensionContext
+): Promise<void> {
 	const workspaceFile = vscode.workspace.workspaceFile;
 	if (workspaceFile && workspaceFile.scheme === 'file' && workspaceFile.fsPath.toLowerCase().endsWith('.code-workspace')) {
 		await projectService.addToHistory(workspaceFile);
@@ -487,11 +648,15 @@ async function trackCurrentWorkspace(projectService: ProjectService, projectProv
 		return;
 	}
 
-	await Promise.all(workspaceFolders.map((workspaceFolder) => projectService.addToHistory(workspaceFolder.uri)));
+	if (workspaceFolders.length > 1 && context) {
+		await projectService.addToHistory(await createMultiRootWorkspaceFile(context, workspaceFolders));
+	} else {
+		await Promise.all(workspaceFolders.map((workspaceFolder) => projectService.addToHistory(workspaceFolder.uri)));
+	}
 	projectProvider.refresh();
 }
 
-function getCurrentProjectUri(): vscode.Uri | undefined {
+async function getCurrentProjectUri(context: vscode.ExtensionContext): Promise<vscode.Uri | undefined> {
 	const workspaceFile = vscode.workspace.workspaceFile;
 	if (workspaceFile && workspaceFile.scheme === 'file' && workspaceFile.fsPath.toLowerCase().endsWith('.code-workspace')) {
 		return workspaceFile;
@@ -505,7 +670,26 @@ function getCurrentProjectUri(): vscode.Uri | undefined {
 		}
 	}
 
-	return vscode.workspace.workspaceFolders?.[0]?.uri;
+	const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+	if (workspaceFolders.length > 1) {
+		return createMultiRootWorkspaceFile(context, workspaceFolders);
+	}
+	return workspaceFolders[0]?.uri;
+}
+
+async function createMultiRootWorkspaceFile(
+	context: vscode.ExtensionContext,
+	workspaceFolders: readonly vscode.WorkspaceFolder[]
+): Promise<vscode.Uri> {
+	const storageRoot = context.globalStorageUri;
+	await vscode.workspace.fs.createDirectory(storageRoot);
+	const workspacePath = vscode.Uri.joinPath(storageRoot, 'multi-root.code-workspace');
+	const content = {
+		folders: workspaceFolders.map((folder) => ({ path: folder.uri.fsPath, name: folder.name })),
+		settings: {}
+	};
+	await vscode.workspace.fs.writeFile(workspacePath, Buffer.from(`${JSON.stringify(content, null, 2)}\n`, 'utf8'));
+	return workspacePath;
 }
 
 async function resolveProjectForOpen(
@@ -626,6 +810,9 @@ async function pickProject(
 
 function detailForProjectQuickPick(project: Project, section: 'saved' | 'history'): string {
 	const details = [section.toUpperCase(), project.collection ?? 'Uncategorized', `Target: ${project.target}`];
+	if (project.stale) {
+		details.push('STALE PATH — choose a replacement or remove it');
+	}
 	if (project.tags && project.tags.length > 0) {
 		details.push(project.tags.map((tag) => `#${tag}`).join(' '));
 	}
@@ -687,11 +874,23 @@ async function pickProjectAction(project: Project): Promise<ProjectActionPickIte
 	}
 
 	return vscode.window.showQuickPick(
-		customActions.map((action) => ({
+		[
+			{
+				label: 'Open Git repository',
+				description: 'Open the project in the current window',
+				command: '__openGitRepository'
+			},
+			{
+				label: 'Open integrated terminal',
+				description: 'Open a terminal at the project root',
+				command: '__openTerminal'
+			},
+			...customActions.map((action) => ({
 			label: action.label,
 			description: action.command,
 			command: action.command
-		})),
+			}))
+		],
 		{ placeHolder: `Run action for ${project.name}` }
 	);
 }
@@ -714,12 +913,12 @@ function isActionAllowedForProject(
 
 function interpolateProjectAction(command: string, project: Project): string {
 	const values: Record<string, string> = {
-		projectPath: project.path,
-		projectName: project.name,
-		projectType: project.type,
-		projectTarget: project.target,
-		projectCollection: project.collection ?? '',
-		projectTags: (project.tags ?? []).join(',')
+		projectPath: shellQuote(project.path),
+		projectName: shellQuote(project.name),
+		projectType: shellQuote(project.type),
+		projectTarget: shellQuote(project.target),
+		projectCollection: shellQuote(project.collection ?? ''),
+		projectTags: shellQuote((project.tags ?? []).join(','))
 	};
 
 	let output = command;
@@ -728,6 +927,19 @@ function interpolateProjectAction(command: string, project: Project): string {
 	}
 
 	return output;
+}
+
+function shellQuote(value: string): string {
+	if (process.platform !== 'win32') {
+		return `'${value.replace(/'/g, `'\\''`)}'`;
+	}
+
+	const shell = `${process.env.ComSpec ?? ''} ${process.env.SHELL ?? ''}`;
+	if (/powershell|pwsh/i.test(shell)) {
+		return `'${value.replace(/'/g, "''")}'`;
+	}
+
+	return `"${value.replace(/(["%])/g, '^$1')}"`;
 }
 
 function compareWorkspaceFolder(leftPath: string, rightPath: string): boolean {
@@ -748,4 +960,12 @@ function errorMessage(error: unknown): string {
 	}
 
 	return `Unexpected error: ${String(error)}`;
+}
+
+function containsPortablePath(value: unknown): boolean {
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
+	const serialized = JSON.stringify(value);
+	return serialized.includes('$PROJECT_ROOT');
 }

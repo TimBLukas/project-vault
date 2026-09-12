@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ProjectLauncherConfig, ProjectConfigProvider } from '../config';
 import { ProjectService } from '../projectService';
-import { createTestExtensionContext } from './testContext';
+import { createTestExtensionContext, InMemoryMemento } from './testContext';
 
 class StaticConfigProvider implements ProjectConfigProvider {
 	public constructor(private readonly config: ProjectLauncherConfig) {}
@@ -167,13 +167,86 @@ suite('ProjectService', () => {
 		assert.deepStrictEqual(importedProject.tags, ['snapshot']);
 	});
 
-	test('removes stale entries when folder no longer exists', async () => {
+	test('rejects malformed replacement imports before changing stored projects', async () => {
+		const service = createService();
+		const projectUri = await createProjectDirectory('protected', 'none');
+		await service.addToSaved(projectUri);
+
+		await assert.rejects(
+			() =>
+				service.importSnapshot(
+					{
+						version: 2,
+						exportedAt: new Date().toISOString(),
+						savedProjects: [{ path: projectUri.fsPath }],
+						historyProjects: 'not-an-array'
+					},
+					'replace'
+				),
+			/ savedProjects and historyProjects must be arrays/
+		);
+
+		assert.strictEqual((await service.getSavedProjects()).length, 1);
+	});
+
+	test('preserves stale entries with a stale marker when folder no longer exists', async () => {
 		const service = createService();
 		const tempProject = await createProjectDirectory('stale-project', 'none');
 		await service.addToSaved(tempProject);
 
 		await fs.rm(tempProject.fsPath, { recursive: true, force: true });
 		const savedProjects = await service.getSavedProjects();
-		assert.strictEqual(savedProjects.length, 0);
+		assert.strictEqual(savedProjects.length, 1);
+		assert.strictEqual(savedProjects[0].stale, true);
+	});
+
+	test('supports aliases, display names, and portable path mappings', async () => {
+		const service = createService();
+		const projectUri = await createProjectDirectory('portable', 'none');
+		const savedProject = await service.addToSaved(projectUri);
+		await service.updateSavedName(savedProject.id, 'Friendly name');
+		await service.updateSavedAliases(savedProject.id, ['demo', 'example']);
+
+		const snapshot = await service.exportSnapshot({ [projectUri.fsPath]: '$PROJECT_ROOT' });
+		assert.strictEqual(snapshot.savedProjects[0].name, 'Friendly name');
+		assert.strictEqual(snapshot.savedProjects[0].path, '$PROJECT_ROOT');
+
+		const importedService = createService();
+		await importedService.importSnapshot(snapshot, 'replace', { '$PROJECT_ROOT': projectUri.fsPath });
+		const imported = (await importedService.getSavedProjects())[0];
+		assert.strictEqual(imported.name, 'Friendly name');
+		assert.deepStrictEqual(imported.aliases, ['demo', 'example']);
+		assert.strictEqual(imported.path, projectUri.fsPath);
+	});
+
+	test('detects package manager metadata', async () => {
+		const service = createService();
+		const projectUri = await createProjectDirectory('pnpm-project', 'none');
+		await fs.writeFile(path.join(projectUri.fsPath, 'pnpm-lock.yaml'), 'lockfileVersion: 9', 'utf8');
+		const project = await service.addToSaved(projectUri);
+		assert.strictEqual(project.packageManager, 'pnpm');
+	});
+
+	test('backs up global state before replacing a list', async () => {
+		const memento = new InMemoryMemento();
+		const context = createTestExtensionContext(memento);
+		const service = new ProjectService(context, new StaticConfigProvider({
+			maxHistoryEntries: 100,
+			maxProjectScanDepth: 2,
+			maxProjectScanDirectories: 250,
+			skipDirectories: [],
+			openInNewWindow: false,
+			enableTypeDetectionCache: false,
+			typeDetectionCacheTtlMs: 300000,
+			sortMode: 'lastAccessed',
+			groupSavedByCollection: true,
+			showGitMetadata: false,
+			gitMetadataCacheTtlMs: 30000,
+			customActions: []
+		}));
+		const projectUri = await createProjectDirectory('backup', 'none');
+		await service.addToHistory(projectUri);
+		await service.clearHistory();
+		assert.ok(memento.get('projectLauncher.historyProjects.backup'));
 	});
 });

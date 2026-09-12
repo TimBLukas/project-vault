@@ -10,6 +10,8 @@ export interface GitMetadata {
 	branch: string;
 	dirty: boolean;
 	lastCommit: string;
+	remote?: string;
+	worktree?: boolean;
 }
 
 interface CachedGitMetadata {
@@ -49,14 +51,19 @@ async function readGitMetadata(rootPath: string): Promise<GitMetadata | undefine
 		const branch = extractBranch(branchLine);
 		const dirty = statusLines.length > 1;
 		const lastCommit = (await runGit(repositoryRoot, ['log', '-1', '--pretty=%h %s'])).trim();
+		const remote = (await runGitOptional(repositoryRoot, ['config', '--get', 'remote.origin.url'])).trim();
+		const gitDir = (await runGitOptional(repositoryRoot, ['rev-parse', '--git-dir'])).trim();
 
 		return {
 			repositoryRoot,
-			branch,
+			branch: branch.slice(0, 256),
 			dirty,
-			lastCommit: lastCommit.length > 0 ? lastCommit : 'No commits'
+			lastCommit: (lastCommit.length > 0 ? lastCommit : 'No commits').slice(0, 512),
+			remote: remote.length > 0 ? remote.slice(0, 2048) : undefined,
+			worktree: gitDir !== '.git'
 		};
-	} catch {
+	} catch (error: unknown) {
+		console.warn(`Project Launcher: unable to read Git metadata for ${rootPath}.`, error);
 		return undefined;
 	}
 }
@@ -64,6 +71,14 @@ async function readGitMetadata(rootPath: string): Promise<GitMetadata | undefine
 async function runGit(cwd: string, args: string[]): Promise<string> {
 	const { stdout } = await execFileAsync('git', ['-C', cwd, ...args], { maxBuffer: 1024 * 1024 });
 	return stdout;
+}
+
+async function runGitOptional(cwd: string, args: string[]): Promise<string> {
+	try {
+		return await runGit(cwd, args);
+	} catch {
+		return '';
+	}
 }
 
 function extractBranch(statusLine: string): string {

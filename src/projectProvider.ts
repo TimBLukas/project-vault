@@ -227,6 +227,15 @@ function projectDescription(project: Project, gitMetadata: GitMetadata | undefin
 	if (project.tags && project.tags.length > 0) {
 		details.push(project.tags.map((tag) => `#${tag}`).join(' '));
 	}
+	if (project.aliases && project.aliases.length > 0) {
+		details.push(`aka ${project.aliases.join(', ')}`);
+	}
+	if (project.packageManager) {
+		details.push(project.packageManager);
+	}
+	if (project.stale) {
+		details.unshift('STALE PATH');
+	}
 
 	if (gitMetadata) {
 		details.push(formatGitDescription(gitMetadata));
@@ -245,12 +254,17 @@ function projectTooltip(project: Project, gitMetadata: GitMetadata | undefined):
 		`Pinned: ${project.pinned ? 'yes' : 'no'}`,
 		`Collection: ${project.collection ?? 'none'}`,
 		`Tags: ${(project.tags ?? []).join(', ') || 'none'}`,
+		`Aliases: ${(project.aliases ?? []).join(', ') || 'none'}`,
+		`Status: ${project.stale ? 'path missing' : 'available'}`,
 		`Last accessed: ${new Date(project.lastAccessed).toLocaleString()}`
 	];
 
 	if (gitMetadata) {
 		lines.push(`Git: ${formatGitDescription(gitMetadata)}`);
 		lines.push(`Git root: ${gitMetadata.repositoryRoot}`);
+		if (gitMetadata.remote) {
+			lines.push(`Git remote: ${gitMetadata.remote}`);
+		}
 	}
 
 	return lines.join('\n');
@@ -258,7 +272,8 @@ function projectTooltip(project: Project, gitMetadata: GitMetadata | undefined):
 
 function formatGitDescription(gitMetadata: GitMetadata): string {
 	const dirtySuffix = gitMetadata.dirty ? '*' : '';
-	return `${gitMetadata.branch}${dirtySuffix} (${gitMetadata.lastCommit})`;
+	const worktreeSuffix = gitMetadata.worktree ? ' worktree' : '';
+	return `${gitMetadata.branch}${dirtySuffix}${worktreeSuffix} (${gitMetadata.lastCommit})`;
 }
 
 function normalizeFilterQuery(filterQuery: string | undefined): string | undefined {
@@ -279,8 +294,21 @@ function applyProjectFilter(projects: Project[], filterQuery: string | undefined
 }
 
 function projectMatchesFilter(project: Project, filterQuery: string): boolean {
+	const syntaxMatch = /^(tag|type|collection):(.+)$/i.exec(filterQuery);
+	if (syntaxMatch) {
+		const value = syntaxMatch[2].trim();
+		switch (syntaxMatch[1].toLowerCase()) {
+			case 'tag':
+				return (project.tags ?? []).some((tag) => tag.toLowerCase().includes(value));
+			case 'type':
+				return project.type.toLowerCase().includes(value);
+			case 'collection':
+				return (project.collection ?? '').toLowerCase().includes(value);
+		}
+	}
 	return (
 		project.name.toLowerCase().includes(filterQuery) ||
+		(project.aliases ?? []).some((alias) => alias.toLowerCase().includes(filterQuery)) ||
 		project.path.toLowerCase().includes(filterQuery) ||
 		project.type.toLowerCase().includes(filterQuery) ||
 		(project.collection ?? '').toLowerCase().includes(filterQuery) ||

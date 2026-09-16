@@ -99,3 +99,6 @@ Exports create a JSON file with:
 - `historyProjects`
 
 You can import with **merge** or **replace** strategy.
+
+Contributions are welcome!
+If you'd like to contribute to this project create a pull request!

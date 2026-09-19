@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { VscodeProjectConfigProvider } from './config';
+import { ProjectLauncherCustomAction, VscodeProjectConfigProvider } from './config';
 import { GitMetadataService } from './gitMetadataService';
 import { normalizePath } from './pathUtils';
 import { sortProjects } from './projectSort';
@@ -287,26 +287,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		if (!selectedProject) {
 			return;
 		}
-		const actions = configProvider.getConfig().customActions
-			.filter((action) => isActionAllowedForProject(action.projectTypes, action.targetKinds, selectedProject.project))
-			.map((action) => ({ action, id: action.id ?? action.label }));
-		if (actions.length === 0) {
-			await vscode.window.showInformationMessage('No compatible custom actions are configured.');
-			return;
-		}
-		const selectedIds = new Set(selectedProject.project.startupActions ?? []);
-		const picks = await vscode.window.showQuickPick(
-			actions.map(({ action, id }) => ({
-				label: action.label,
-				description: action.command,
-				picked: selectedIds.has(id),
-				id
-			})),
-			{ canPickMany: true, placeHolder: 'Choose actions to run after opening this project' }
-		);
-		if (picks) {
-			await projectService.updateSavedStartupActions(selectedProject.project.id, picks.map((pick) => pick.id));
+		let customActions = configProvider.getConfig().customActions;
+		while (true) {
+			const actions = customActions
+				.filter((action) => isActionAllowedForProject(action.projectTypes, action.targetKinds, selectedProject.project))
+				.map((action) => ({ action, id: action.id ?? action.label }));
+			const selectedIds = new Set(selectedProject.project.startupActions ?? []);
+			const picks = await vscode.window.showQuickPick(
+				[
+					{
+						label: '$(plus) Add custom action',
+						description: 'Add a command that can be used for any project',
+						id: '__addCustomAction',
+						picked: false
+					},
+					...actions.map(({ action, id }) => ({
+						label: action.label,
+						description: action.command,
+						picked: selectedIds.has(id),
+						id
+					}))
+				],
+				{ canPickMany: true, placeHolder: 'Choose actions to run after opening this project' }
+			);
+			if (!picks) {
+				return;
+			}
+
+			if (picks.some((pick) => pick.id === '__addCustomAction')) {
+				const addedAction = await addCustomAction(customActions);
+				if (addedAction) {
+					customActions = [...customActions, addedAction];
+					await vscode.workspace
+						.getConfiguration('projectLauncher')
+						.update('customActions', customActions, vscode.ConfigurationTarget.Global);
+				}
+				continue;
+			}
+
+			await projectService.updateSavedStartupActions(
+				selectedProject.project.id,
+				picks.map((pick) => pick.id)
+			);
 			projectProvider.refresh();
+			return;
 		}
 	});
 
@@ -956,6 +980,55 @@ async function pickProjectAction(project: Project): Promise<ProjectActionPickIte
 		],
 		{ placeHolder: `Run action for ${project.name}` }
 	);
+}
+
+async function addCustomAction(existingActions: ProjectLauncherCustomAction[]): Promise<ProjectLauncherCustomAction | undefined> {
+	const label = await vscode.window.showInputBox({
+		prompt: 'Name for the custom startup action',
+		placeHolder: 'Start API',
+		validateInput: (value) => {
+			if (value.trim().length === 0) {
+				return 'Enter an action name.';
+			}
+			return value.length > 120 ? 'Use 120 characters or fewer.' : undefined;
+		}
+	});
+	if (label === undefined) {
+		return undefined;
+	}
+
+	const command = await vscode.window.showInputBox({
+		prompt: 'Command to run from the project root',
+		placeHolder: 'python -m uvicorn app:app --reload',
+		validateInput: (value) => {
+			if (value.trim().length === 0) {
+				return 'Enter a command.';
+			}
+			if (value.length > 2000) {
+				return 'Use 2000 characters or fewer.';
+			}
+			return /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)
+				? 'Control characters are not allowed.'
+				: undefined;
+		}
+	});
+	if (command === undefined) {
+		return undefined;
+	}
+
+	const normalizedLabel = label.trim();
+	const baseId = (
+		normalizedLabel.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'action'
+	).slice(0, 90);
+	const existingIds = new Set(existingActions.map((action) => action.id ?? action.label));
+	let id = baseId;
+	let suffix = 2;
+	while (existingIds.has(id)) {
+		id = `${baseId}-${suffix}`;
+		suffix += 1;
+	}
+
+	return { id, label: normalizedLabel, command: command.trim() };
 }
 
 async function scheduleStartupActions(selectedProject: ProjectSelection): Promise<void> {

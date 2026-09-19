@@ -46,6 +46,7 @@ This release adds:
 - Edit display names and aliases; search with `tag:`, `type:`, and `collection:` syntax.
 - Add a short project description, shown in tooltips and searchable with `description:`.
 - Configure confirmed startup actions that run after opening a saved project.
+- Add your own startup commands from **Configure Startup Actions**; commands run in a terminal at the project root.
 - Show Git branch, dirty state, remote, worktree, and last commit metadata.
 - Detect common Java, .NET, PHP, Ruby, Kotlin, Docker, Terraform, monorepo, and package-manager markers.
 - Preserve multi-root workspaces when adding the current workspace.
@@ -117,6 +118,12 @@ malformed update can be recovered without silently losing data.
   project type.
 - `projectLauncher.enableDiagnosticLogging`: Opt-in error diagnostics in the
   Project Vault output channel. No telemetry is collected.
+
+Custom actions can also be added interactively with **Project Vault: Configure Startup Actions**.
+Choose **Add custom action**, enter a label and command, and the action is saved to the
+global VS Code settings. Commands may use `${projectPath}`, `${projectName}`,
+`${projectType}`, `${projectTarget}`, `${projectCollection}`, and `${projectTags}`.
+They run only in trusted workspaces and require confirmation.
 
 ## Import/Export Format
 

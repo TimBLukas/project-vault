@@ -4,7 +4,7 @@
   "displayName": "Project Vault",
   "icon": "resources/project-vault.jpeg",
   "description": "Manage saved projects, workspace files, tags, collections, and recent history.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "TBL",
   "engines": {
     "vscode": "^1.137.0"
@@ -49,6 +49,8 @@
     "onCommand:projectLauncher.revealProject",
     "onCommand:projectLauncher.editProjectName",
     "onCommand:projectLauncher.editProjectAliases",
+    "onCommand:projectLauncher.editProjectDescription",
+    "onCommand:projectLauncher.configureStartupActions",
     "onCommand:projectLauncher.refresh"
   ],
   "main": "./out/extension.js",
@@ -202,6 +204,16 @@
         "category": "Project Vault"
       },
       {
+        "command": "projectLauncher.editProjectDescription",
+        "title": "Project Vault: Edit Project Description",
+        "category": "Project Vault"
+      },
+      {
+        "command": "projectLauncher.configureStartupActions",
+        "title": "Project Vault: Configure Startup Actions",
+        "category": "Project Vault"
+      },
+      {
         "command": "projectLauncher.refresh",
         "title": "Project Vault: Refresh",
         "category": "Project Vault"
@@ -285,6 +297,16 @@
           "command": "projectLauncher.editProjectAliases",
           "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
           "group": "navigation@13"
+        },
+        {
+          "command": "projectLauncher.editProjectDescription",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
+          "group": "navigation@14"
+        },
+        {
+          "command": "projectLauncher.configureStartupActions",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
+          "group": "navigation@15"
         },
         {
           "command": "projectLauncher.pinProject",
@@ -449,6 +471,7 @@
           "description": "Custom terminal actions available per project. Use ${projectPath}, ${projectName}, ${projectType}, ${projectTarget}, ${projectCollection}, ${projectTags}.",
           "default": [
             {
+              "id": "npm-dev",
               "label": "npm: dev",
               "command": "npm run dev",
               "targetKinds": [
@@ -456,6 +479,7 @@
               ]
             },
             {
+              "id": "npm-test",
               "label": "npm: test",
               "command": "npm test",
               "targetKinds": [
@@ -467,6 +491,9 @@
             "type": "object",
             "properties": {
               "label": {
+                "type": "string"
+              },
+              "id": {
                 "type": "string"
               },
               "command": {
@@ -490,6 +517,11 @@
               "command"
             ]
           }
+        },
+        "projectLauncher.confirmStartupActions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask for confirmation before running configured project startup actions."
         },
         "projectLauncher.enableDiagnosticLogging": {
           "type": "boolean",

@@ -28,16 +28,25 @@ interface ProjectQuickPickItem extends vscode.QuickPickItem {
 
 interface ProjectActionPickItem extends vscode.QuickPickItem {
 	command: string;
+	actionId?: string;
 }
 
 type ProjectSelectionScope = 'saved' | 'history' | 'all';
 type OpenMode = 'configured' | 'currentWindow' | 'newWindow' | 'split' | 'newWorkspace';
+interface PendingStartup {
+	projectPath: string;
+	actionIds: string[];
+	createdAt: number;
+}
 
 const configProvider = new VscodeProjectConfigProvider();
 const gitMetadataService = new GitMetadataService();
 let diagnosticLogger: vscode.OutputChannel | undefined;
+let extensionContext: vscode.ExtensionContext | undefined;
+const PENDING_STARTUP_KEY = 'projectLauncher.pendingStartup';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	extensionContext = context;
 	diagnosticLogger = vscode.window.createOutputChannel('Project Vault');
 	context.subscriptions.push(diagnosticLogger);
 	const projectService = new ProjectService(context);
@@ -99,10 +108,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		).map((project) => {
 			const section = allProjects.find((entry) => entry.project.id === project.id)?.section ?? 'history';
 			const tags = project.tags && project.tags.length > 0 ? ` • ${project.tags.map((tag) => `#${tag}`).join(' ')}` : '';
+			const description = project.description ? ` • ${project.description}` : '';
 			return {
 				label: `${section === 'saved' ? '$(star-full) ' : ''}${project.name}`,
 				description: `${project.type} • ${project.path}`,
-				detail: `${section.toUpperCase()} • ${project.collection ?? 'Uncategorized'}${tags}`,
+				detail: `${section.toUpperCase()} • ${project.collection ?? 'Uncategorized'}${tags}${description}`,
 				project,
 				section
 			} as ProjectQuickPickItem;
@@ -247,6 +257,55 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		});
 		if (aliases !== undefined) {
 			await projectService.updateSavedAliases(selectedProject.project.id, splitTagInput(aliases));
+			projectProvider.refresh();
+		}
+	});
+
+	registerCommand(context, 'projectLauncher.editProjectDescription', async (...args: unknown[]) => {
+		const selectedProject = await resolveSavedProjectSelection(projectService, toProjectTreeItem(args[0]), 'Select a saved project');
+		if (!selectedProject) {
+			return;
+		}
+		const description = await vscode.window.showInputBox({
+			prompt: 'Short project description',
+			placeHolder: 'What is this project for?',
+			value: selectedProject.project.description ?? '',
+			validateInput: (value) => value.trim().length > 500 ? 'Use 500 characters or fewer.' : undefined
+		});
+		if (description !== undefined) {
+			await projectService.updateSavedDescription(selectedProject.project.id, description);
+			projectProvider.refresh();
+		}
+	});
+
+	registerCommand(context, 'projectLauncher.configureStartupActions', async (...args: unknown[]) => {
+		if (!vscode.workspace.isTrusted) {
+			await vscode.window.showErrorMessage('Startup actions are disabled until this workspace is trusted.');
+			return;
+		}
+		const selectedProject = await resolveSavedProjectSelection(projectService, toProjectTreeItem(args[0]), 'Select a saved project');
+		if (!selectedProject) {
+			return;
+		}
+		const actions = configProvider.getConfig().customActions
+			.filter((action) => isActionAllowedForProject(action.projectTypes, action.targetKinds, selectedProject.project))
+			.map((action) => ({ action, id: action.id ?? action.label }));
+		if (actions.length === 0) {
+			await vscode.window.showInformationMessage('No compatible custom actions are configured.');
+			return;
+		}
+		const selectedIds = new Set(selectedProject.project.startupActions ?? []);
+		const picks = await vscode.window.showQuickPick(
+			actions.map(({ action, id }) => ({
+				label: action.label,
+				description: action.command,
+				picked: selectedIds.has(id),
+				id
+			})),
+			{ canPickMany: true, placeHolder: 'Choose actions to run after opening this project' }
+		);
+		if (picks) {
+			await projectService.updateSavedStartupActions(selectedProject.project.id, picks.map((pick) => pick.id));
 			projectProvider.refresh();
 		}
 	});
@@ -476,11 +535,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 
 	await trackCurrentWorkspace(projectService, projectProvider, context);
+	await runPendingStartup(context, projectService);
 
 	const workspaceFolderListener = vscode.workspace.onDidChangeWorkspaceFolders((event) => {
 		void executeWithErrorSurface(async () => {
 			await Promise.all(event.added.map((workspaceFolder) => projectService.addToHistory(workspaceFolder.uri)));
 			projectProvider.refresh();
+			await runPendingStartup(context, projectService);
 		});
 	});
 
@@ -540,6 +601,7 @@ async function openSelection(
 
 	await projectService.addExistingToHistory(selectedProject.project);
 	projectProvider.refresh();
+	await scheduleStartupActions(selectedProject);
 	await openProject(selectedProject.project, openMode);
 }
 
@@ -888,10 +950,77 @@ async function pickProjectAction(project: Project): Promise<ProjectActionPickIte
 			...customActions.map((action) => ({
 			label: action.label,
 			description: action.command,
-			command: action.command
+			command: action.command,
+			actionId: action.id ?? action.label
 			}))
 		],
 		{ placeHolder: `Run action for ${project.name}` }
+	);
+}
+
+async function scheduleStartupActions(selectedProject: ProjectSelection): Promise<void> {
+	if (selectedProject.section !== 'saved' || !selectedProject.project.startupActions?.length || !extensionContext) {
+		return;
+	}
+	const pending: PendingStartup = {
+		projectPath: selectedProject.project.path,
+		actionIds: selectedProject.project.startupActions,
+		createdAt: Date.now()
+	};
+	await extensionContext.globalState.update(PENDING_STARTUP_KEY, pending);
+}
+
+async function runPendingStartup(context: vscode.ExtensionContext, projectService: ProjectService): Promise<void> {
+	const pending = context.globalState.get<PendingStartup>(PENDING_STARTUP_KEY);
+	if (!pending || !Array.isArray(pending.actionIds) || Date.now() - pending.createdAt > 5 * 60 * 1000) {
+		if (pending) {
+			await context.globalState.update(PENDING_STARTUP_KEY, undefined);
+		}
+		return;
+	}
+	if (!isCurrentWorkspaceProject(pending.projectPath)) {
+		return;
+	}
+	await context.globalState.update(PENDING_STARTUP_KEY, undefined);
+	if (!vscode.workspace.isTrusted) {
+		await vscode.window.showErrorMessage('Startup actions were skipped because this workspace is not trusted.');
+		return;
+	}
+	const project = (await projectService.getSavedProjects()).find((entry) => normalizePath(entry.path) === normalizePath(pending.projectPath));
+	if (!project) {
+		return;
+	}
+	const configuredActions = configProvider.getConfig().customActions
+		.filter((action) => pending.actionIds.includes(action.id ?? action.label))
+		.filter((action) => isActionAllowedForProject(action.projectTypes, action.targetKinds, project));
+	if (configuredActions.length === 0) {
+		return;
+	}
+	if (configProvider.getConfig().confirmStartupActions) {
+		const confirmation = await vscode.window.showWarningMessage(
+			`Run ${configuredActions.length} startup action(s) for ${project.name}?`,
+			{ modal: true },
+			'Run Startup Actions'
+		);
+		if (confirmation !== 'Run Startup Actions') {
+			return;
+		}
+	}
+	const workingDirectory = project.target === 'workspace' ? path.dirname(project.path) : project.path;
+	const terminal = vscode.window.createTerminal({ name: `Project Vault: ${project.name}`, cwd: workingDirectory });
+	terminal.show(true);
+	for (const action of configuredActions) {
+		terminal.sendText(interpolateProjectAction(action.command, project), true);
+	}
+}
+
+function isCurrentWorkspaceProject(projectPath: string): boolean {
+	const workspaceFile = vscode.workspace.workspaceFile;
+	if (workspaceFile && normalizePath(workspaceFile.fsPath) === normalizePath(projectPath)) {
+		return true;
+	}
+	return (vscode.workspace.workspaceFolders ?? []).some(
+		(folder) => normalizePath(folder.uri.fsPath) === normalizePath(projectPath)
 	);
 }
 

@@ -8,6 +8,30 @@ Project Vault adds a dedicated Activity Bar view to manage saved projects, works
 
 You can find this extension in the [Visual Studio Code Marketplace](https://marketplace.visualstudio.com/items?itemName=TBL.project-vault).
 
+## Version History
+
+### 0.0.1 - Initial release
+
+The initial release introduced the core Project Vault library:
+
+- Save workspace folders and `.code-workspace` files.
+- Track recently opened projects.
+- Organize projects with pins, tags, collections, aliases, and sorting.
+- Open projects in different windows, splits, or workspaces.
+- Detect project types, package managers, and Git metadata.
+- Run configurable terminal actions.
+- Import and export project data with portable path mappings.
+- Preserve and identify stale project paths.
+
+### 0.0.2 - Project metadata and startup actions
+
+This release adds:
+
+- Short descriptions for saved projects, displayed in tooltips and searchable with `description:`.
+- Per-project startup action selection.
+- Safe startup action execution after opening a project.
+- Trust checks, confirmation prompts, project compatibility filtering, and five-minute expiry for pending startup actions.
+
 
 ## Features
 
@@ -20,6 +44,8 @@ You can find this extension in the [Visual Studio Code Marketplace](https://mark
 - Run configurable **custom terminal actions** per project.
 - Open an integrated terminal, reveal a project in the OS file manager, or open its Git repository.
 - Edit display names and aliases; search with `tag:`, `type:`, and `collection:` syntax.
+- Add a short project description, shown in tooltips and searchable with `description:`.
+- Configure confirmed startup actions that run after opening a saved project.
 - Show Git branch, dirty state, remote, worktree, and last commit metadata.
 - Detect common Java, .NET, PHP, Ruby, Kotlin, Docker, Terraform, monorepo, and package-manager markers.
 - Preserve multi-root workspaces when adding the current workspace.
@@ -68,6 +94,8 @@ malformed update can be recovered without silently losing data.
 - `Project Vault: Reveal Project in File Manager`
 - `Project Vault: Edit Project Display Name`
 - `Project Vault: Edit Project Aliases`
+- `Project Vault: Edit Project Description`
+- `Project Vault: Configure Startup Actions`
 - `Project Vault: Refresh`
 
 ## Extension Settings
@@ -84,6 +112,7 @@ malformed update can be recovered without silently losing data.
 - `projectLauncher.showGitMetadata`: Show Git metadata in tree descriptions/tooltips.
 - `projectLauncher.gitMetadataCacheTtlMs`: Cache lifetime for Git metadata.
 - `projectLauncher.customActions`: Custom terminal actions for projects.
+- `projectLauncher.confirmStartupActions`: Ask for confirmation before running startup actions.
 - `projectLauncher.projectMarkers`: Additional filename markers mapped to a
   project type.
 - `projectLauncher.enableDiagnosticLogging`: Opt-in error diagnostics in the

@@ -130,6 +130,18 @@ suite('ProjectProvider', () => {
 		assert.strictEqual(filteredByTag[0].project?.name, 'service-rust');
 	});
 
+	test('filters projects by description syntax', async () => {
+		const saved = [
+			createProject('1', 'frontend', 'React', 20, { description: 'Customer portal' }),
+			createProject('2', 'service', 'Rust', 10, { description: 'Internal API' })
+		];
+		const provider = createProvider(saved, [], { groupSavedByCollection: false });
+		provider.setFilter('description:portal');
+		const results = await provider.getChildren(new ProjectTreeItem('section', 'saved'));
+		assert.strictEqual(results.length, 1);
+		assert.strictEqual(results[0].project?.name, 'frontend');
+	});
+
 	test('applies dedicated context values for pinned and unpinned saved projects', () => {
 		const pinnedProjectItem = new ProjectTreeItem(
 			'project',

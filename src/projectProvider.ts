@@ -255,6 +255,8 @@ function projectTooltip(project: Project, gitMetadata: GitMetadata | undefined):
 		`Collection: ${project.collection ?? 'none'}`,
 		`Tags: ${(project.tags ?? []).join(', ') || 'none'}`,
 		`Aliases: ${(project.aliases ?? []).join(', ') || 'none'}`,
+		`Description: ${project.description ?? 'none'}`,
+		`Startup actions: ${(project.startupActions ?? []).join(', ') || 'none'}`,
 		`Status: ${project.stale ? 'path missing' : 'available'}`,
 		`Last accessed: ${new Date(project.lastAccessed).toLocaleString()}`
 	];
@@ -294,7 +296,7 @@ function applyProjectFilter(projects: Project[], filterQuery: string | undefined
 }
 
 function projectMatchesFilter(project: Project, filterQuery: string): boolean {
-	const syntaxMatch = /^(tag|type|collection):(.+)$/i.exec(filterQuery);
+	const syntaxMatch = /^(tag|type|collection|description):(.+)$/i.exec(filterQuery);
 	if (syntaxMatch) {
 		const value = syntaxMatch[2].trim();
 		switch (syntaxMatch[1].toLowerCase()) {
@@ -304,6 +306,8 @@ function projectMatchesFilter(project: Project, filterQuery: string): boolean {
 				return project.type.toLowerCase().includes(value);
 			case 'collection':
 				return (project.collection ?? '').toLowerCase().includes(value);
+			case 'description':
+				return (project.description ?? '').toLowerCase().includes(value);
 		}
 	}
 	return (
@@ -313,6 +317,7 @@ function projectMatchesFilter(project: Project, filterQuery: string): boolean {
 		project.type.toLowerCase().includes(filterQuery) ||
 		(project.collection ?? '').toLowerCase().includes(filterQuery) ||
 		(project.tags ?? []).some((tag) => tag.toLowerCase().includes(filterQuery))
+		|| (project.description ?? '').toLowerCase().includes(filterQuery)
 	);
 }
 

@@ -117,6 +117,19 @@ suite('ProjectService', () => {
 		assert.strictEqual(updatedProject?.collection, 'Client Work');
 	});
 
+	test('stores descriptions and startup action selections', async () => {
+		const service = createService();
+		const projectUri = await createProjectDirectory('described', 'none');
+		const savedProject = await service.addToSaved(projectUri);
+
+		await service.updateSavedDescription(savedProject.id, 'Customer-facing API');
+		await service.updateSavedStartupActions(savedProject.id, ['npm-dev', 'npm-dev', 'invalid id']);
+
+		const updatedProject = (await service.getSavedProjects())[0];
+		assert.strictEqual(updatedProject.description, 'Customer-facing API');
+		assert.deepStrictEqual(updatedProject.startupActions, ['npm-dev']);
+	});
+
 	test('limits history list and supports remove/clear', async () => {
 		const service = createService({ maxHistoryEntries: 2 });
 		const first = await createProjectDirectory('history-one', 'go');

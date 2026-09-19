@@ -36,6 +36,8 @@ export interface Project {
 	collection?: string;
 	stale?: boolean;
 	packageManager?: string;
+	description?: string;
+	startupActions?: string[];
 }
 
 export interface ProjectSnapshot {
@@ -44,6 +46,24 @@ export interface ProjectSnapshot {
 	savedProjects: Project[];
 	historyProjects: Project[];
 	pathMappings?: Record<string, string>;
+}
+
+function normalizeDescription(description: string | undefined): string | undefined {
+	if (description === undefined) {
+		return undefined;
+	}
+	const normalized = description.trim();
+	if (normalized.length > 500) {
+		throw new Error('Project description must be 500 characters or fewer.');
+	}
+	return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeStartupActions(actionIds: string[]): string[] {
+	return Array.from(new Set(actionIds
+		.filter((actionId): actionId is string => typeof actionId === 'string')
+		.map((actionId) => actionId.trim())
+		.filter((actionId) => /^[a-zA-Z0-9._-]{1,100}$/.test(actionId))));
 }
 
 export type ImportStrategy = 'replace' | 'merge';
@@ -130,6 +150,15 @@ export class ProjectService {
 
 	public async updateSavedAliases(projectId: string, aliases: string[]): Promise<Project | undefined> {
 		return this.updateSavedProject(projectId, { aliases: normalizeAliases(aliases) });
+	}
+
+	public async updateSavedDescription(projectId: string, description: string | undefined): Promise<Project | undefined> {
+		const normalizedDescription = normalizeDescription(description);
+		return this.updateSavedProject(projectId, { description: normalizedDescription });
+	}
+
+	public async updateSavedStartupActions(projectId: string, actionIds: string[]): Promise<Project | undefined> {
+		return this.updateSavedProject(projectId, { startupActions: normalizeStartupActions(actionIds) });
 	}
 
 	public async removeHistoryProject(projectId: string): Promise<void> {
@@ -411,7 +440,9 @@ function parseStoredProject(value: unknown): Project | undefined {
 		tags: parseTags(value.tags),
 		collection: normalizeCollection(typeof value.collection === 'string' ? value.collection : undefined),
 		stale: typeof value.stale === 'boolean' ? value.stale : undefined,
-		packageManager: typeof value.packageManager === 'string' ? value.packageManager : undefined
+		packageManager: typeof value.packageManager === 'string' ? value.packageManager : undefined,
+		description: typeof value.description === 'string' ? value.description : undefined,
+		startupActions: parseTags(value.startupActions)
 	});
 }
 
@@ -469,9 +500,10 @@ function parseImportedProject(value: unknown, fieldName: string): Project {
 	}
 	if (
 		project.tags?.some((tag) => tag.length > MAX_IMPORTED_STRING_LENGTH) ||
-		(project.collection !== undefined && project.collection.length > MAX_IMPORTED_STRING_LENGTH)
+		(project.collection !== undefined && project.collection.length > MAX_IMPORTED_STRING_LENGTH) ||
+		(project.description !== undefined && project.description.length > 500)
 	) {
-		throw new Error(`Invalid import file: ${fieldName} contains overly long tags or collection data.`);
+		throw new Error(`Invalid import file: ${fieldName} contains overly long metadata.`);
 	}
 
 	return normalizeProject(project);
@@ -572,6 +604,8 @@ function normalizeProject(project: Project): Project {
 		collection: normalizeCollection(project.collection),
 		stale: project.stale === true ? true : undefined,
 		packageManager: project.packageManager?.trim() || undefined
+		,description: normalizeDescription(project.description)
+		,startupActions: normalizeStartupActions(project.startupActions ?? [])
 	};
 }
 
@@ -661,6 +695,8 @@ function areProjectListsEqual(left: Project[], right: Project[]): boolean {
 			JSON.stringify(leftProject.tags ?? []) === JSON.stringify(rightProject.tags ?? []) &&
 			(leftProject.stale ?? false) === (rightProject.stale ?? false) &&
 			(leftProject.packageManager ?? '') === (rightProject.packageManager ?? '')
+			&& (leftProject.description ?? '') === (rightProject.description ?? '')
+			&& JSON.stringify(leftProject.startupActions ?? []) === JSON.stringify(rightProject.startupActions ?? [])
 		);
 	});
 }

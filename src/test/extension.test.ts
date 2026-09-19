@@ -22,6 +22,8 @@ suite('Extension Integration', () => {
 			'projectLauncher.unpinProject',
 			'projectLauncher.editProjectTags',
 			'projectLauncher.setProjectCollection',
+			'projectLauncher.editProjectDescription',
+			'projectLauncher.configureStartupActions',
 			'projectLauncher.removeHistoryProject',
 			'projectLauncher.clearHistory',
 			'projectLauncher.filterProjects',

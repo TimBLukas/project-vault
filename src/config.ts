@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ProjectSortMode } from './projectSort';
 
 export interface ProjectLauncherCustomAction {
+	id?: string;
 	label: string;
 	command: string;
 	projectTypes?: string[];
@@ -21,6 +22,7 @@ export interface ProjectLauncherConfig {
 	showGitMetadata: boolean;
 	gitMetadataCacheTtlMs: number;
 	customActions: ProjectLauncherCustomAction[];
+	confirmStartupActions?: boolean;
 	enableDiagnosticLogging?: boolean;
 	projectMarkers?: Record<string, string>;
 }
@@ -46,6 +48,7 @@ export class VscodeProjectConfigProvider implements ProjectConfigProvider {
 			showGitMetadata: configuration.get<boolean>('showGitMetadata', true),
 			gitMetadataCacheTtlMs: readNumberSetting(configuration, 'gitMetadataCacheTtlMs', 30000, 1000, 300000),
 			customActions: readCustomActions(configuration, 'customActions', defaultCustomActions())
+			,confirmStartupActions: configuration.get<boolean>('confirmStartupActions', true)
 			,enableDiagnosticLogging: configuration.get<boolean>('enableDiagnosticLogging', false)
 			,projectMarkers: readProjectMarkers(configuration)
 		};
@@ -141,10 +144,14 @@ function parseCustomAction(value: unknown): ProjectLauncherCustomAction | undefi
 
 	const rawLabel = value.label;
 	const rawCommand = value.command;
+	const rawId = value.id;
 	if (typeof rawLabel !== 'string' || rawLabel.trim().length === 0) {
 		return undefined;
 	}
 	if (typeof rawCommand !== 'string' || rawCommand.trim().length === 0) {
+		return undefined;
+	}
+	if (rawId !== undefined && (typeof rawId !== 'string' || !/^[a-zA-Z0-9._-]{1,100}$/.test(rawId.trim()))) {
 		return undefined;
 	}
 	if (rawLabel.length > 120 || rawCommand.length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(rawCommand)) {
@@ -152,6 +159,7 @@ function parseCustomAction(value: unknown): ProjectLauncherCustomAction | undefi
 	}
 
 	return {
+		id: typeof rawId === 'string' ? rawId.trim() : undefined,
 		label: rawLabel.trim().slice(0, 120),
 		command: rawCommand.trim().slice(0, 2000),
 		projectTypes: toOptionalStringArray(value.projectTypes)?.slice(0, 20),
@@ -184,11 +192,13 @@ function defaultSkipDirectories(): string[] {
 function defaultCustomActions(): ProjectLauncherCustomAction[] {
 	return [
 		{
+			id: 'npm-dev',
 			label: 'npm: dev',
 			command: 'npm run dev',
 			targetKinds: ['folder']
 		},
 		{
+			id: 'npm-test',
 			label: 'npm: test',
 			command: 'npm test',
 			targetKinds: ['folder']

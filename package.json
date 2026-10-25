@@ -51,6 +51,7 @@
     "onCommand:projectLauncher.editProjectAliases",
     "onCommand:projectLauncher.editProjectDescription",
     "onCommand:projectLauncher.configureStartupActions",
+    "onCommand:projectLauncher.repairProject",
     "onCommand:projectLauncher.refresh"
   ],
   "main": "./out/extension.js",
@@ -214,6 +215,11 @@
         "category": "Project Vault"
       },
       {
+        "command": "projectLauncher.repairProject",
+        "title": "Project Vault: Repair Project",
+        "category": "Project Vault"
+      },
+      {
         "command": "projectLauncher.refresh",
         "title": "Project Vault: Refresh",
         "category": "Project Vault"
@@ -307,6 +313,11 @@
           "command": "projectLauncher.configureStartupActions",
           "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
           "group": "navigation@15"
+        },
+        {
+          "command": "projectLauncher.repairProject",
+          "when": "view == projectLauncherView && (viewItem == project.saved.pinned || viewItem == project.saved.unpinned)",
+          "group": "navigation@16"
         },
         {
           "command": "projectLauncher.pinProject",

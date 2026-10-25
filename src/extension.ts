@@ -334,6 +334,58 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 	});
 
+	registerCommand(context, 'projectLauncher.repairProject', async (...args: unknown[]) => {
+		const selectedProject = await resolveSavedProjectSelection(projectService, toProjectTreeItem(args[0]), 'Select a saved project');
+		if (!selectedProject) {
+			return;
+		}
+
+		const action = await vscode.window.showQuickPick(
+			[
+				{ label: 'Relink project path', description: 'Choose the folder or workspace file at its new location.', value: 'relink' },
+				{ label: 'Refresh project metadata', description: 'Re-detect the project type and package manager.', value: 'refresh' },
+				{ label: 'Remove invalid startup actions', description: 'Remove actions that no longer exist in settings.', value: 'startup' }
+			],
+			{ placeHolder: `Repair ${selectedProject.project.name}` }
+		);
+		if (!action) {
+			return;
+		}
+
+		if (action.value === 'relink') {
+			const selection = await vscode.window.showOpenDialog({
+				canSelectMany: false,
+				canSelectFiles: true,
+				canSelectFolders: true,
+				openLabel: 'Relink Project'
+			});
+			if (!selection?.[0]) {
+				return;
+			}
+			await projectService.relinkSavedProject(selectedProject.project.id, selection[0]);
+			projectProvider.refresh();
+			await vscode.window.showInformationMessage(`Relinked ${selectedProject.project.name}.`);
+			return;
+		}
+
+		if (action.value === 'refresh') {
+			if (!(await projectService.isValidProjectTarget(selectedProject.project))) {
+				await vscode.window.showWarningMessage('The project path is unavailable. Relink it first.');
+				return;
+			}
+			await projectService.refreshSavedProject(selectedProject.project.id);
+			projectProvider.refresh();
+			await vscode.window.showInformationMessage(`Refreshed ${selectedProject.project.name}.`);
+			return;
+		}
+
+		const configuredIds = new Set(configProvider.getConfig().customActions.map((configured) => configured.id ?? configured.label));
+		const validActionIds = (selectedProject.project.startupActions ?? []).filter((id) => configuredIds.has(id));
+		await projectService.updateSavedStartupActions(selectedProject.project.id, validActionIds);
+		projectProvider.refresh();
+		await vscode.window.showInformationMessage(`Removed invalid startup actions from ${selectedProject.project.name}.`);
+	});
+
 	registerCommand(context, 'projectLauncher.openProjectTerminal', async (...args: unknown[]) => {
 		const selectedProject = await resolveProjectForOpen(projectService, toProjectTreeItem(args[0]));
 		if (!selectedProject) {

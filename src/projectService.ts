@@ -161,6 +161,37 @@ export class ProjectService {
 		return this.updateSavedProject(projectId, { startupActions: normalizeStartupActions(actionIds) });
 	}
 
+	public async relinkSavedProject(projectId: string, targetUri: vscode.Uri): Promise<Project | undefined> {
+		const projects = await this.readProjects(SAVED_PROJECTS_KEY);
+		const existingProject = projects.find((project) => project.id === projectId);
+		if (!existingProject) {
+			return undefined;
+		}
+
+		const replacement = await this.createProject(targetUri);
+		return this.updateSavedProject(projectId, {
+			...replacement,
+			id: existingProject.id,
+			name: existingProject.name,
+			pinned: existingProject.pinned,
+			aliases: existingProject.aliases,
+			tags: existingProject.tags,
+			collection: existingProject.collection,
+			description: existingProject.description,
+			startupActions: existingProject.startupActions
+		});
+	}
+
+	public async refreshSavedProject(projectId: string): Promise<Project | undefined> {
+		const projects = await this.readProjects(SAVED_PROJECTS_KEY);
+		const existingProject = projects.find((project) => project.id === projectId);
+		if (!existingProject) {
+			return undefined;
+		}
+
+		return this.relinkSavedProject(projectId, vscode.Uri.file(existingProject.path));
+	}
+
 	public async removeHistoryProject(projectId: string): Promise<void> {
 		const projects = await this.readProjects(HISTORY_PROJECTS_KEY);
 		const nextProjects = projects.filter((project) => project.id !== projectId);

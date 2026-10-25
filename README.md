@@ -53,6 +53,8 @@ This release adds:
 - Quick-open saved/history projects via command palette with fuzzy matching.
 - Export and import project data as JSON, including optional `$PROJECT_ROOT` path mappings.
 - Keep missing projects as clearly marked **stale** entries instead of silently deleting them.
+- Show project health directly in the tree, including missing paths, invalid workspace files, missing package-manager lockfiles, and invalid startup actions.
+- Filter by health with `health:healthy`, `health:warning`, or `health:critical`, and repair saved projects by relinking paths, refreshing metadata, or removing invalid startup actions.
 
 ## Security and trust
 
@@ -97,6 +99,7 @@ malformed update can be recovered without silently losing data.
 - `Project Vault: Edit Project Aliases`
 - `Project Vault: Edit Project Description`
 - `Project Vault: Configure Startup Actions`
+- `Project Vault: Repair Project`
 - `Project Vault: Refresh`
 
 ## Extension Settings

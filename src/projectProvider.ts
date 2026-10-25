@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import { ProjectConfigProvider, VscodeProjectConfigProvider } from './config';
+import { ProjectConfigProvider, ProjectLauncherCustomAction, VscodeProjectConfigProvider } from './config';
 import { GitMetadata, GitMetadataService } from './gitMetadataService';
+import { ProjectHealth, ProjectHealthService } from './projectHealth';
 import { sortProjects } from './projectSort';
 import { Project } from './projectService';
 
@@ -15,6 +16,7 @@ export interface ProjectQueryService {
 interface ProjectDisplayEntry {
 	project: Project;
 	gitMetadata: GitMetadata | undefined;
+	health: ProjectHealth;
 }
 
 export class ProjectTreeItem extends vscode.TreeItem {
@@ -23,7 +25,8 @@ export class ProjectTreeItem extends vscode.TreeItem {
 		public readonly section: ProjectSection,
 		public readonly project?: Project,
 		public readonly collectionName?: string,
-		public readonly gitMetadata?: GitMetadata
+		public readonly gitMetadata?: GitMetadata,
+		public readonly health?: ProjectHealth
 	) {
 		super(
 			resolveLabel(nodeType, section, project, collectionName),
@@ -48,9 +51,9 @@ export class ProjectTreeItem extends vscode.TreeItem {
 
 		this.contextValue =
 			section === 'saved' ? (project.pinned ? 'project.saved.pinned' : 'project.saved.unpinned') : 'project.history';
-		this.iconPath = projectIcon(project, section);
-		this.description = projectDescription(project, gitMetadata);
-		this.tooltip = projectTooltip(project, gitMetadata);
+		this.iconPath = projectIcon(project, section, health);
+		this.description = projectDescription(project, gitMetadata, health);
+		this.tooltip = projectTooltip(project, gitMetadata, health);
 		this.command = {
 			command: 'projectLauncher.openProject',
 			title: 'Open Project',
@@ -69,7 +72,8 @@ export class ProjectProvider implements vscode.TreeDataProvider<ProjectTreeItem>
 	public constructor(
 		private readonly projectService: ProjectQueryService,
 		private readonly configProvider: ProjectConfigProvider = new VscodeProjectConfigProvider(),
-		private readonly gitMetadataService: GitMetadataService = new GitMetadataService()
+		private readonly gitMetadataService: GitMetadataService = new GitMetadataService(),
+		private readonly projectHealthService: ProjectHealthService = new ProjectHealthService()
 	) {}
 
 	public dispose(): void {
@@ -149,7 +153,7 @@ export class ProjectProvider implements vscode.TreeDataProvider<ProjectTreeItem>
 
 		const displayEntries = await this.getDisplayEntries(projects);
 		return displayEntries.map(
-			(entry) => new ProjectTreeItem('project', section, entry.project, undefined, entry.gitMetadata)
+			(entry) => new ProjectTreeItem('project', section, entry.project, undefined, entry.gitMetadata, entry.health)
 		);
 	}
 
@@ -163,29 +167,60 @@ export class ProjectProvider implements vscode.TreeDataProvider<ProjectTreeItem>
 		);
 		const displayEntries = await this.getDisplayEntries(projects);
 		return displayEntries.map(
-			(entry) => new ProjectTreeItem('project', 'saved', entry.project, collectionName, entry.gitMetadata)
+			(entry) => new ProjectTreeItem('project', 'saved', entry.project, collectionName, entry.gitMetadata, entry.health)
 		);
 	}
 
 	private async getVisibleSortedProjects(section: ProjectSection): Promise<Project[]> {
 		const config = this.configProvider.getConfig();
 		const projects = section === 'saved' ? await this.projectService.getSavedProjects() : await this.projectService.getHistoryProjects();
-		const visibleProjects = applyProjectFilter(projects, this.filterQuery);
+		const visibleProjects = await this.applyProjectFilter(projects, this.filterQuery, config.customActions);
 		return sortProjects(visibleProjects, config.sortMode, section === 'saved');
+	}
+
+	private async applyProjectFilter(
+		projects: Project[],
+		filterQuery: string | undefined,
+		customActions: ProjectLauncherCustomAction[]
+	): Promise<Project[]> {
+		const healthMatch = filterQuery && /^health:(healthy|warning|critical)$/i.exec(filterQuery);
+		if (!healthMatch) {
+			return applyProjectFilter(projects, filterQuery);
+		}
+
+		const requestedHealth = healthMatch[1].toLowerCase();
+		const healthEntries = await Promise.all(
+			projects.map(async (project) => ({
+				project,
+				health: await this.getHealth(project, customActions)
+			}))
+		);
+		return healthEntries
+			.filter((entry) => entry.health.status === requestedHealth)
+			.map((entry) => entry.project);
 	}
 
 	private async getDisplayEntries(projects: Project[]): Promise<ProjectDisplayEntry[]> {
 		const config = this.configProvider.getConfig();
 		if (!config.showGitMetadata) {
-			return projects.map((project) => ({ project, gitMetadata: undefined }));
+			return Promise.all(projects.map(async (project) => ({
+				project,
+				gitMetadata: undefined,
+				health: await this.getHealth(project, config.customActions)
+			})));
 		}
 
 		return Promise.all(
 			projects.map(async (project) => ({
 				project,
-				gitMetadata: await this.gitMetadataService.getMetadata(project, config.gitMetadataCacheTtlMs)
+				gitMetadata: await this.gitMetadataService.getMetadata(project, config.gitMetadataCacheTtlMs),
+				health: await this.getHealth(project, config.customActions)
 			}))
 		);
+	}
+
+	private getHealth(project: Project, customActions: ProjectLauncherCustomAction[]): Promise<ProjectHealth> {
+		return this.projectHealthService.getHealth(project, { customActions });
 	}
 }
 
@@ -206,7 +241,13 @@ function resolveLabel(
 	return project?.name ?? '';
 }
 
-function projectIcon(project: Project, section: ProjectSection): vscode.ThemeIcon {
+function projectIcon(project: Project, section: ProjectSection, health: ProjectHealth | undefined): vscode.ThemeIcon {
+	if (health?.status === 'critical') {
+		return new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
+	}
+	if (health?.status === 'warning') {
+		return new vscode.ThemeIcon('warning', new vscode.ThemeColor('editorWarning.foreground'));
+	}
 	if (section === 'saved' && project.pinned) {
 		return new vscode.ThemeIcon('star-full');
 	}
@@ -214,11 +255,15 @@ function projectIcon(project: Project, section: ProjectSection): vscode.ThemeIco
 	return new vscode.ThemeIcon(project.target === 'workspace' ? 'files' : 'folder');
 }
 
-function projectDescription(project: Project, gitMetadata: GitMetadata | undefined): string {
+function projectDescription(project: Project, gitMetadata: GitMetadata | undefined, health: ProjectHealth | undefined): string {
 	const details: string[] = [
 		project.type,
 		project.target === 'workspace' ? 'workspace' : 'folder'
 	];
+
+	if (health && health.status !== 'healthy') {
+		details.unshift(health.status === 'critical' ? 'UNHEALTHY' : 'NEEDS ATTENTION');
+	}
 
 	if (project.collection) {
 		details.push(project.collection);
@@ -245,7 +290,7 @@ function projectDescription(project: Project, gitMetadata: GitMetadata | undefin
 	return details.join(' • ');
 }
 
-function projectTooltip(project: Project, gitMetadata: GitMetadata | undefined): string {
+function projectTooltip(project: Project, gitMetadata: GitMetadata | undefined, health: ProjectHealth | undefined): string {
 	const lines = [
 		project.name,
 		project.path,
@@ -260,6 +305,11 @@ function projectTooltip(project: Project, gitMetadata: GitMetadata | undefined):
 		`Status: ${project.stale ? 'path missing' : 'available'}`,
 		`Last accessed: ${new Date(project.lastAccessed).toLocaleString()}`
 	];
+
+	if (health) {
+		lines.push(`Health: ${health.status}`);
+		lines.push(...health.issues.map((issue) => `Health issue: ${issue.message}`));
+	}
 
 	if (gitMetadata) {
 		lines.push(`Git: ${formatGitDescription(gitMetadata)}`);
